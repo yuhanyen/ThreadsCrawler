@@ -1,0 +1,4 @@
+requests>=2.31
+
+# Optional — only needed for `--mode browser`:
+# playwright>=1.40

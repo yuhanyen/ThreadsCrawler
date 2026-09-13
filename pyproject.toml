@@ -1,0 +1,20 @@
+[project]
+name = "threads-crawler"
+version = "0.1.0"
+description = "Scrape public posts from threads.com"
+requires-python = ">=3.10"
+dependencies = ["requests>=2.31"]
+
+[project.optional-dependencies]
+browser = ["playwright>=1.40"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+threads-crawler = "threads_crawler.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

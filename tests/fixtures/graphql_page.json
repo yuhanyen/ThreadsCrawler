@@ -1,0 +1,59 @@
+{
+  "data": {
+    "mediaData": {
+      "edges": [
+        {
+          "node": {
+            "thread_items": [
+              {
+                "post": {
+                  "pk": "3456789012345678901",
+                  "id": "3456789012345678901_314159",
+                  "code": "C9xAbCdEfGh",
+                  "taken_at": 1726200000,
+                  "like_count": 1234,
+                  "caption": {
+                    "text": "今天測試 ThreadsCrawler，抓得到文章 ✅"
+                  },
+                  "user": {
+                    "pk": "314159",
+                    "username": "example_user",
+                    "full_name": "Example User",
+                    "is_verified": true,
+                    "profile_pic_url": "https://cdn.example.com/pic.jpg"
+                  },
+                  "image_versions2": {
+                    "candidates": [
+                      {
+                        "url": "https://cdn.example.com/small.jpg",
+                        "width": 320,
+                        "height": 320
+                      },
+                      {
+                        "url": "https://cdn.example.com/large.jpg",
+                        "width": 1080,
+                        "height": 1080
+                      }
+                    ]
+                  },
+                  "text_post_app_info": {
+                    "direct_reply_count": 42,
+                    "repost_count": 7,
+                    "quote_count": 3,
+                    "link_preview_attachment": {
+                      "url": "https://example.com/article"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "page_info": {
+        "end_cursor": "CURSOR_B",
+        "has_next_page": false
+      }
+    }
+  }
+}

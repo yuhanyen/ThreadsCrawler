@@ -1,0 +1,7 @@
+config.json
+.claude/
+browser_profile/
+output/
+logs/
+__pycache__/
+*.pyc

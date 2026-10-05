@@ -1,0 +1,4 @@
+flask>=2.2
+requests>=2.31
+tzdata>=2024.1
+playwright>=1.60

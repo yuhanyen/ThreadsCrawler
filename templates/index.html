@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threads 貼文收集器</title>
+<style>
+  :root { --accent:#101010; --green:#0a7d33; --red:#c0392b; --border:#dcdfe4; }
+  * { box-sizing:border-box; }
+  body { font-family:"Segoe UI","Microsoft JhengHei",sans-serif; margin:0;
+         background:#f0f2f5; color:#1c1e21; }
+  .wrap { max-width:860px; margin:0 auto; padding:24px 16px 60px; }
+  h1 { font-size:1.5rem; margin:8px 0 20px; }
+  .card { background:#fff; border:1px solid var(--border); border-radius:10px;
+          padding:18px 20px; margin-bottom:16px; }
+  .card h2 { font-size:1.05rem; margin:0 0 12px; }
+  label { display:block; font-size:.85rem; color:#555; margin:10px 0 4px; }
+  textarea, input[type=time], select {
+    width:100%; max-width:560px; padding:8px 10px; font-size:.92rem;
+    border:1px solid var(--border); border-radius:6px; font-family:Consolas,"Microsoft JhengHei",monospace; }
+  input[type=time] { max-width:140px; font-family:inherit; }
+  select { max-width:180px; font-family:inherit; }
+  .chk { display:flex; align-items:center; gap:6px; margin-top:10px; font-size:.9rem; color:#333; }
+  .time-row { display:flex; align-items:center; gap:8px; margin:6px 0; }
+  .time-row button { margin-top:0; padding:5px 10px; background:#c0392b; font-size:.85rem; }
+  button { padding:9px 18px; font-size:.95rem; border:none; border-radius:6px;
+           background:var(--accent); color:#fff; cursor:pointer; margin-top:12px; }
+  button:hover { filter:brightness(1.4); }
+  button:disabled { background:#a9a9a9; cursor:not-allowed; }
+  .btn-big { font-size:1.1rem; padding:12px 36px; }
+  .btn-gray { background:#606770; }
+  .status { font-size:.88rem; margin-top:8px; }
+  .ok { color:var(--green); } .err { color:var(--red); } .muted { color:#888; }
+  .log { background:#111; color:#9fe89f; font-family:Consolas,monospace; font-size:.82rem;
+         padding:12px; border-radius:8px; max-height:260px; overflow-y:auto;
+         white-space:pre-wrap; margin-top:12px; }
+  table { border-collapse:collapse; width:100%; font-size:.88rem; }
+  th, td { border-bottom:1px solid var(--border); padding:8px 6px; text-align:left; }
+  th { color:#555; font-weight:600; }
+  a { color:#0064d1; text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  ul { margin:6px 0; padding-left:20px; font-size:.9rem; color:#333; }
+  li { margin:3px 0; }
+  code { background:#eef1f4; padding:1px 6px; border-radius:4px; font-size:.85em; }
+  .run-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:6px; }
+  input[type=number] { width:90px; padding:8px 10px; font-size:.92rem;
+    border:1px solid var(--border); border-radius:6px; }
+  .preset { background:#ececec; color:#222; padding:6px 12px; font-size:.85rem; margin-top:0; }
+  .preset:hover { filter:brightness(.95); }
+  details { margin-top:4px; }
+  details summary { cursor:pointer; font-size:1.05rem; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🧵 Threads 貼文收集器</h1>
+
+  <div class="card">
+    <h2>ℹ️ 使用說明</h2>
+    <ul>
+      <li>在「收集目標」填入要追蹤的<b>帳號</b>（<code>@帳號</code>）或<b>關鍵字</b>，每行一個，按儲存。</li>
+      <li>在「立即收集」填要往回抓幾小時，按一下就開始；輸出 CSV（Excel 可直接開）。</li>
+      <li>目前設定：<b id="info-time">載入中…</b></li>
+      <li>收集作業在<b>主機</b>執行（預設會開啟瀏覽器視窗自動瀏覽，<b>請勿關閉</b>），完成後在下方下載 CSV。</li>
+      <li>只能收集<b>公開帳號</b>。未登入時每個帳號只抓得到最近十幾串、關鍵字只有少量熱門結果；
+          登入後才能完整收集。</li>
+      <li><b>要登入請按「主機登入 Threads」</b>：會開一個專用視窗等您 10 分鐘（夠過驗證碼），登入成功後自動關閉。
+          「立即收集」跳出的視窗是自動瀏覽用的，跑完就會關閉，<b>請不要在那個視窗登入</b>。</li>
+    </ul>
+    <div class="status muted" id="lan-url"></div>
+  </div>
+
+  <div class="card">
+    <h2>🚀 立即收集</h2>
+    <label>要收集最近幾小時的貼文（1～168，168 = 7 天）</label>
+    <div class="run-row">
+      <input type="number" id="run-hours" min="1" max="168" step="1" value="24">
+      <span class="muted" style="font-size:.88rem">小時</span>
+      <button type="button" class="preset" onclick="setHours(24)">過去 1 天</button>
+      <button type="button" class="preset" onclick="setHours(48)">過去 2 天</button>
+      <button type="button" class="preset" onclick="setHours(168)">過去 7 天</button>
+    </div>
+    <div class="run-row">
+      <button class="btn-big" id="btn-run" onclick="runNow()">立即收集</button>
+      <button class="btn-gray" id="btn-login" onclick="runTask('/api/login')">主機登入 Threads</button>
+    </div>
+    <div class="status muted" style="margin-top:6px">時間範圍越長跑越久（每個目標約 30～90 秒）。</div>
+    <pre id="log" class="log" style="display:none"></pre>
+    <div class="status" id="run-result"></div>
+  </div>
+
+  <div class="card">
+    <h2>⚙️ 收集目標</h2>
+    <label>帳號或關鍵字（每行一個）</label>
+    <textarea id="targets" rows="6" placeholder="@zuck&#10;https://www.threads.com/@openai&#10;生成式AI"></textarea>
+    <div class="status muted"><code>@帳號</code> 或個人頁網址 → 收集該帳號的貼文；其他文字 → 當關鍵字搜尋最新貼文。</div>
+    <details id="schedule-box">
+      <summary>⏰ 每日自動收集（進階，預設關閉）</summary>
+      <div class="chk"><input type="checkbox" id="schedule-enabled"><span>啟用每日自動收集（主機程式需保持開啟）</span></div>
+      <label>自動收集的時間點（可多個，每個時間點各收集一次）</label>
+      <div id="times-list"></div>
+      <button type="button" class="btn-gray" style="margin-top:6px;padding:6px 14px;font-size:.85rem"
+              onclick="addTimeRow('')">＋ 新增時間點</button>
+      <label>每次自動收集往回抓的時間範圍</label>
+      <select id="schedule-hours">
+        <option value="24">過去 24 小時</option>
+        <option value="48">過去 48 小時</option>
+      </select>
+    </details>
+    <button onclick="saveConfig()">儲存設定</button>
+    <div class="status" id="config-status"></div>
+  </div>
+
+  <div class="card">
+    <h2>📁 歷史結果</h2>
+    <table>
+      <thead><tr><th>收集時間</th><th>貼文數</th><th>下載</th></tr></thead>
+      <tbody id="history"><tr><td colspan="3" class="muted">載入中…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>📜 服務日誌</h2>
+    <div class="status muted">服務長期執行紀錄（含每日排程結果，存於 logs/service.log，重啟不會消失；每 10 秒自動更新）</div>
+    <pre id="service-log" class="log">載入中…</pre>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function api(url, body) {
+  const resp = await fetch(url, body === undefined ? {} : {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || resp.statusText);
+  return data;
+}
+
+let polling = null;
+
+async function refresh() {
+  const st = await api("/api/status");
+  $("targets").value = st.targets.join("\n");
+  renderTimes(st.schedule_times || []);
+  $("schedule-enabled").checked = st.schedule_enabled;
+  $("schedule-hours").value = String(st.schedule_hours ?? 24);
+  const n = st.targets.length;
+  $("info-time").textContent = st.schedule_enabled
+    ? `${n} 個目標・每天 ${(st.schedule_times || []).join("、")} 自動收集過去 ${st.schedule_hours ?? 24} 小時`
+    : `${n} 個目標・手動模式（不會自動收集，按「立即收集」才會跑）`;
+  if (st.schedule_enabled) $("schedule-box").open = true;
+  $("lan-url").textContent = st.lan_url
+    ? "同仁請開：" + st.lan_url + "（需在同一個內部網路）" : "";
+  renderHistory(st.history);
+  if (st.running && !polling) startPolling();
+}
+
+function addTimeRow(val) {
+  const row = document.createElement("div");
+  row.className = "time-row";
+  const input = document.createElement("input");
+  input.type = "time";
+  input.value = val;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = "✕";
+  btn.title = "移除這個時間點";
+  btn.onclick = () => row.remove();
+  row.append(input, btn);
+  $("times-list").appendChild(row);
+}
+
+function renderTimes(times) {
+  $("times-list").innerHTML = "";
+  (times.length ? times : ["09:00"]).forEach(addTimeRow);
+}
+
+function renderHistory(items) {
+  $("history").innerHTML = items.length
+    ? items.map(h => `<tr>
+        <td>${esc(h.mtime)}</td>
+        <td>${h.count ?? "?"} 篇</td>
+        <td><a href="/download/${encodeURIComponent(h.csv)}">⬇ CSV</a>
+            ${h.json ? `&nbsp;<a href="/download/${encodeURIComponent(h.json)}">⬇ JSON</a>` : ""}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="3" class="muted">還沒有收集結果</td></tr>`;
+}
+
+function setHours(h) { $("run-hours").value = String(h); }
+
+function runNow() {
+  const hours = parseInt($("run-hours").value, 10);
+  if (!Number.isInteger(hours) || hours < 1 || hours > 168) {
+    $("run-result").innerHTML = "<span class='err'>❌ 小時數請填 1～168 的整數</span>";
+    return;
+  }
+  runTask("/api/crawl", {hours});
+}
+
+async function saveConfig() {
+  const enabled = $("schedule-enabled").checked;
+  let times = [...document.querySelectorAll("#times-list input")]
+    .map(i => i.value).filter(Boolean);
+  if (!times.length) {
+    if (enabled) {
+      $("config-status").innerHTML = "<span class='err'>❌ 啟用自動收集時，至少要設定一個時間點</span>";
+      return;
+    }
+    times = ["09:00"];   // 後端要求至少一個；停用時只是佔位，不會觸發
+  }
+  try {
+    await api("/api/config", {
+      targets: $("targets").value.split("\n"),
+      schedule_times: times,
+      schedule_enabled: enabled,
+      schedule_hours: parseInt($("schedule-hours").value, 10),
+    });
+    $("config-status").innerHTML = "<span class='ok'>✅ 已儲存</span>";
+    refresh();
+  } catch (e) {
+    $("config-status").innerHTML = `<span class='err'>❌ ${esc(e.message)}</span>`;
+  }
+}
+
+async function runTask(url, body) {
+  $("run-result").textContent = "";
+  try {
+    await api(url, body || {});
+    startPolling();
+  } catch (e) {
+    $("run-result").innerHTML = `<span class='err'>❌ ${esc(e.message)}</span>`;
+  }
+}
+
+function startPolling() {
+  setButtons(true);
+  $("log").style.display = "";
+  poll();
+  polling = setInterval(poll, 2000);
+}
+
+async function poll() {
+  const st = await api("/api/crawl_status");
+  const logEl = $("log");
+  logEl.textContent = st.log.join("\n");
+  logEl.scrollTop = logEl.scrollHeight;
+  if (!st.running) {
+    clearInterval(polling); polling = null;
+    setButtons(false);
+    if (st.error) {
+      $("run-result").innerHTML = `<span class='err'>❌ ${esc(st.error)}</span>`;
+    } else if (st.result) {
+      $("run-result").innerHTML = `<span class='ok'>✅ 完成，共 ${st.result.count} 篇</span>
+        &nbsp;<a href="/download/${encodeURIComponent(st.result.csv)}">⬇ 下載 CSV</a>
+        ${st.result.json ? `&nbsp;<a href="/download/${encodeURIComponent(st.result.json)}">⬇ 下載 JSON</a>` : ""}`;
+    }
+    refresh();
+  }
+}
+
+async function loadServiceLog() {
+  try {
+    const d = await api("/api/logs");
+    const el = $("service-log");
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+    el.textContent = d.lines.length ? d.lines.join("\n") : "（尚無紀錄）";
+    if (atBottom) el.scrollTop = el.scrollHeight;  // 使用者往上捲時不要搶捲動位置
+  } catch (e) { /* 服務重啟中暫時抓不到，下一輪再試 */ }
+}
+
+function setButtons(running) {
+  $("btn-run").disabled = running;
+  $("btn-login").disabled = running;
+  $("btn-run").textContent = running ? "⏳ 收集中…" : "立即收集";
+}
+
+refresh();
+loadServiceLog();
+setInterval(loadServiceLog, 10000);
+</script>
+</body>
+</html>
